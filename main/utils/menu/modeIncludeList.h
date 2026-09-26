@@ -30,7 +30,6 @@
 */
 
 #include "accelTest.h"
-#include "atrium.h"
 #include "canvas.h"
 #include "colorchord.h"
 #include "dance.h"
@@ -46,9 +45,7 @@
 #include "mode_synth.h"
 #include "nameTest.h"
 #include "roboRunner.h"
-#include "sonaTest.h"
 #include "swadgePassTest.h"
-#include "swsnCreator.h"
 #include "touchTest.h"
 #include "trophyCase.h"
 #include "trophyTest.h"
