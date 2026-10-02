@@ -481,6 +481,11 @@ void app_main(void)
     // Initialize optional peripherals, depending on the mode's requests
     initOptionalPeripherals();
 
+#if defined(CONFIG_HARDWARE_PULSE)
+    // The SAO_MPoint shares the IMU's software I2C bus.
+    initSaoMPoint();
+#endif
+
     // Initialize the loop timer
     static int64_t tLastLoopUs = 0;
     tLastLoopUs                = esp_timer_get_time();
@@ -512,6 +517,11 @@ void app_main(void)
         int64_t tNowUs     = esp_timer_get_time();
         int64_t tElapsedUs = tNowUs - tLastLoopUs;
         tLastLoopUs        = tNowUs;
+
+#if defined(CONFIG_HARDWARE_PULSE)
+        // Retry a disconnected MCU every two seconds and update its online state.
+        pollSaoMPoint();
+#endif
 
         // Process ADC samples
         if (cSwadgeModeInit && NULL != cSwadgeMode->fnAudioCallback)

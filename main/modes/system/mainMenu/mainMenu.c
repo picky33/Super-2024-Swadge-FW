@@ -4,6 +4,8 @@
 
 #include "swadge.h"
 
+#include <stdio.h>
+
 #include "mainMenu.h"
 
 #include "modeIncludeList.h"
@@ -26,6 +28,8 @@ typedef struct
 #endif
     int32_t cheatCodeIdx;
     bool debugMode;
+    menuItem_t* saoMPointStatusItem;
+    char saoMPointStatusLabel[32];
 #if defined(SW_VOL_CONTROL)
     bool fanfarePlaying;
 #endif
@@ -362,6 +366,14 @@ static void mainMenuMainLoop(int64_t elapsedUs)
 
 #endif
 
+#if defined(CONFIG_HARDWARE_PULSE)
+    if (NULL != mainMenu->saoMPointStatusItem)
+    {
+        snprintf(mainMenu->saoMPointStatusLabel, sizeof(mainMenu->saoMPointStatusLabel), "SAO_MPoint: %s",
+                 saoMPointIsOnline() ? "Detected" : "Not Detected");
+    }
+#endif
+
     // Draw the menu
     drawMenuZorldo(mainMenu->menu, mainMenu->renderer, elapsedUs);
 
@@ -526,6 +538,11 @@ void addSecretsMenu(void)
     mainMenu->menu = startSubMenu(mainMenu->menu, "Secrets");
 
     addSingleItemToMenu(mainMenu->menu, "Git Hash: " GIT_SHA1);
+#if defined(CONFIG_HARDWARE_PULSE)
+    snprintf(mainMenu->saoMPointStatusLabel, sizeof(mainMenu->saoMPointStatusLabel), "SAO_MPoint: %s",
+             saoMPointIsOnline() ? "Detected" : "Not Detected");
+    mainMenu->saoMPointStatusItem = addSingleItemToMenu(mainMenu->menu, mainMenu->saoMPointStatusLabel);
+#endif
     addSettingsOptionsItemToMenu(mainMenu->menu, mainMenuShowSecretsMenuName, showSecretsMenuSettingOptions,
                                  showSecretsMenuSettingValues, ARRAY_SIZE(showSecretsMenuSettingOptions),
                                  getShowSecretsMenuSettingBounds(), getShowSecretsMenuSetting());

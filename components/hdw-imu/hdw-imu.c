@@ -3,6 +3,7 @@
 //==============================================================================
 
 #include <esp_log.h>
+#include <esp_timer.h>
 #include <math.h>
 #include <string.h>
 #include "driver/gpio.h"
@@ -91,11 +92,16 @@ typedef enum __attribute__((packed))
 #define LSM6DSL_ADDRESS 0x6a
 #define QMC6308_ADDRESS 0x2c
 
+#define SAO_MPOINT_RETRY_INTERVAL_US (2 * 1000 * 1000)
+
 //==============================================================================
 // Variables
 //==============================================================================
 
 LSM6DSLData LSM6DSL;
+
+static bool saoMPointOnline;
+static int64_t saoMPointLastProbeUs;
 
 //==============================================================================
 // Static Function Prototypes
@@ -115,6 +121,7 @@ static esp_err_t GeneralSet(int dev, int reg, int val);
 static esp_err_t LSM6DSLSet(int reg, int val);
 static int GeneralI2CGet(int device, int reg, uint8_t* data, int data_len);
 static int ReadLSM6DSL(uint8_t* data, int data_len);
+static bool probeSaoMPoint(void);
 
 //==============================================================================
 // Utility Functions
@@ -184,6 +191,24 @@ static int GeneralI2CGet(int device, int reg, uint8_t* data, int data_len)
     }
     SendStop();
     return data_len;
+}
+
+
+/**
+ * @brief Address the SAO_MPoint and determine whether it acknowledged.
+ *
+ * An address-only transaction avoids assuming a register layout before the
+ * MCU-to-MCU message protocol is defined.
+ */
+static bool probeSaoMPoint(void)
+{
+    SendStart();
+    bool didAcknowledge = !SendByte(SAO_MPOINT_I2C_ADDRESS << 1);
+    SendStop();
+
+    saoMPointOnline      = didAcknowledge;
+    saoMPointLastProbeUs = esp_timer_get_time();
+    return didAcknowledge;
 }
 
 /**
@@ -356,8 +381,83 @@ esp_err_t deInitAccelerometer(void)
 }
 
 /**
- * @brief Power down the accelerometer and gyroscope
+ * @brief Initialize the shared software I2C bus and probe the SAO_MPoint.
  */
+void initSaoMPoint(void)
+{
+    gpio_config_t gpioConfig = {
+        .pin_bit_mask = (1ULL << 3) | (1ULL << 41),
+        .mode         = GPIO_MODE_INPUT_OUTPUT,
+        .pull_up_en   = GPIO_PULLUP_ENABLE,
+    };
+    gpio_config(&gpioConfig);
+
+    // Releasing both lines gives the open-drain software I2C driver an idle bus.
+    DSDA_IHIGH
+    DSCL_IHIGH
+
+    saoMPointOnline      = false;
+    saoMPointLastProbeUs = 0;
+    probeSaoMPoint();
+}
+
+void pollSaoMPoint(void)
+{
+    int64_t nowUs = esp_timer_get_time();
+    if ((nowUs - saoMPointLastProbeUs) >= SAO_MPOINT_RETRY_INTERVAL_US)
+    {
+        probeSaoMPoint();
+    }
+}
+
+bool saoMPointIsOnline(void)
+{
+    return saoMPointOnline;
+}
+
+esp_err_t saoMPointWrite(const uint8_t* data, uint16_t dataLen)
+{
+    if ((NULL == data) && (0 != dataLen))
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    SendStart();
+    bool didAcknowledge = !SendByte(SAO_MPOINT_I2C_ADDRESS << 1);
+    for (uint16_t i = 0; didAcknowledge && (i < dataLen); i++)
+    {
+        didAcknowledge = !SendByte(data[i]);
+    }
+    SendStop();
+
+    saoMPointOnline      = didAcknowledge;
+    saoMPointLastProbeUs = esp_timer_get_time();
+    return didAcknowledge ? ESP_OK : ESP_FAIL;
+}
+
+esp_err_t saoMPointRead(uint8_t* data, uint16_t dataLen)
+{
+    if ((NULL == data) || (0 == dataLen))
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    SendStart();
+    bool didAcknowledge = !SendByte((SAO_MPOINT_I2C_ADDRESS << 1) | 1);
+    if (didAcknowledge)
+    {
+        for (uint16_t i = 0; i < dataLen; i++)
+        {
+            data[i] = GetByte(i == (dataLen - 1));
+        }
+    }
+    SendStop();
+
+    saoMPointOnline      = didAcknowledge;
+    saoMPointLastProbeUs = esp_timer_get_time();
+    return didAcknowledge ? ESP_OK : ESP_FAIL;
+}
+
 void powerDownAccel(void)
 {
     LSM6DSLSet(LSM6DSL_CTRL1_XL, 0b00000000); // Power down Accelerometer

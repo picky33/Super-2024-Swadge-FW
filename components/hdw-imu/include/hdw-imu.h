@@ -44,6 +44,7 @@
 #define _HDW_IMU_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include <hal/gpio_types.h>
 #include <soc/gpio_num.h>
@@ -84,6 +85,9 @@ typedef struct
 
 extern LSM6DSLData LSM6DSL;
 
+/** 7-bit address of the SAO_MPoint on the shared software I2C bus. */
+#define SAO_MPOINT_I2C_ADDRESS 0x08
+
 esp_err_t initAccelerometer(gpio_num_t sda, gpio_num_t scl, gpio_pullup_t pullup);
 esp_err_t deInitAccelerometer(void);
 void powerDownAccel(void);
@@ -96,5 +100,20 @@ esp_err_t accelPerformCal(void);
 esp_err_t accelGetSteeringAngleDegrees(int16_t* xcomp, int16_t* ycomp);
 float accelGetStdDevInCal(void);
 void accelSetRegistersAndReset(void);
+
+/** Start monitoring the SAO_MPoint at SAO_MPOINT_I2C_ADDRESS. */
+void initSaoMPoint(void);
+
+/** Probe the SAO_MPoint when its two-second retry interval has elapsed. */
+void pollSaoMPoint(void);
+
+/** @return true when the MCU most recently acknowledged its I2C address. */
+bool saoMPointIsOnline(void);
+
+/** Write a protocol-defined message to the SAO_MPoint. */
+esp_err_t saoMPointWrite(const uint8_t* data, uint16_t dataLen);
+
+/** Read a protocol-defined message from the SAO_MPoint. */
+esp_err_t saoMPointRead(uint8_t* data, uint16_t dataLen);
 
 #endif
